@@ -12,6 +12,8 @@ It processes all images in a given folder, generates orientation/Z-band/M-band/m
 - **Single channel only**: The script expects an image containing **only the sarcomere signal** (no RGB, no extra channels).  
   If your microscopy export contains multiple channels, split them first in ImageJ/Fiji or your acquisition software and save only the relevant sarcomere channel as a separate `.tif`.
 - Avoid compression; use uncompressed TIFFs for compatibility.
+- Find the Pixel Size of your Image in ImageJ/Fiji
+  Image → Properties (Shift+P) → Width, Height, Pixel size, Unit
 
 ---
 
