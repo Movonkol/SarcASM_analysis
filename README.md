@@ -117,14 +117,4 @@ out_dir/
 - Packages: `sarc-asm`, `numpy` (installed via `pip install sarc-asm numpy`)
 - OS: Windows/macOS/Linux (paths shown are examples)
 
----
 
-## Citation / Acknowledgement
-
-If you use this in a publication, please cite the underlying **SarcAsM (`sarc-asm`)** toolkit as appropriate and reference this repository/script version (*SarcAsM batch v5*).
-
----
-
-## License
-
-Add your chosen license (e.g., MIT) here.
