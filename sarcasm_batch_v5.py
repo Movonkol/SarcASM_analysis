@@ -1,18 +1,18 @@
 # /env python3
 """
-SarcAsM batch (folder) — v5.3
-- Zählt n_sarcomeres robust: bevorzugt 'n_vectors', sonst aus 'sarcomere_length_vectors' abgeleitet.
+SarcAsM batch (folder) — v6.2  (Z-Band-Overlay NACH Filtern)
+
+- Zählt n_sarcomeres robust: bevorzugt 'n_vectors', sonst aus 'sarcomere_length_vectors'.
 - Modellpfad (model_path) & Rescale-Faktor (rescale_factor) konfigurierbar.
-- Falls sarcasm.detect_sarcomeres(rescale_factor=...) nicht unterstützt:
-  Fallback: 2D-TIFF wird manuell reskaliert und Pixelgröße angepasst.
+- Fallback: 2D-TIFF wird manuell reskaliert und Pixelgröße angepasst, falls native Reskalierung nicht geht.
+- Overlay: Z-Bänder werden nach den Filtern (Z ∧ finale sarcomere_mask) farbig ins Original gelegt.
 
 Requires:
     pip install sarc-asm
-    # Für Fallback-Rescaling (nur falls benötigt):
-    pip install scikit-image tifffile
+    pip install tifffile scikit-image  # I/O, Resize, Otsu, remove_small_objects
 
 Usage:
-    python sarcasm_batch.py --rescale 0.7 --model "C:\pfad\zu\weights.pth"
+    python sarcasm_batch.py --rescale 0.7 --model "C:\\pfad\\zu\\weights.pth"
 """
 from pathlib import Path
 import os, shutil, csv, argparse, warnings, contextlib
@@ -20,12 +20,13 @@ import numpy as np
 from sarcasm import Structure
 
 # -------------------- USER SETTINGS --------------------
-input_dir = r"C:\Users\Moritz\Downloads\ki67"  # <-- folder with TIFFs
-pixelsize_um_per_px = 0.0707008                 # µm/px
+input_dir = r"C:\Users\Moritz\Downloads\2D_sarcasm\2D_sarcasm" # <-- folder with TIFFs
+pixelsize_um_per_px = 0.1417                 # µm/px
 out_dir = r"./sarcasm_results"                  # output folder
 recurse = False                                 # True -> include subfolders
 # Analysis params
-threshold_mbands = 0.4
+threshold_mbands = 0.25
+zbands_threshold = 0.3
 median_filter_radius = 0.25   # µm
 linewidth = 0.2               # µm
 interp_factor = 4
@@ -33,8 +34,22 @@ slen_lims = (1.5, 2.4)        # µm (min, max)
 
 # Konfigurierbar
 model_path = None             # z.B. r"C:\...\unetpp_sarcomere.pth"; None = Standard
-rescale_factor = 0.7          # 0.5: Downscale, >1.0: Upscale
+rescale_factor = 1.0          # 0.5: Downscale, >1.0: Upscale
+
+# ----------- OVERLAY SETTINGS -----------
+make_overlay = True
+overlay_color_rgb = (0, 255, 0)     # Farbe der Z-Bänder (R,G,B)
+overlay_alpha = 0.55                # 0..1
+overlay_suffix = "_overlay_zbands"  # Dateiname-Suffix (.tif)
+overlay_mask_threshold = 0.1     # "auto" (Otsu) ODER z.B. 0.3 (fix)
+overlay_min_size_px = 0           # Kleinstpartikel entfernen; 0 = aus
+# --- FILTERED-Z OVERLAY SETTINGS ---
+use_filtered_zmask = True           # Z ∧ finale sarcomere_mask
+sarco_mask_threshold = "auto"       # Binarisierung für sarcomere_mask
+save_filtered_zmask = True          # gefilterte Z-Maske zusätzlich speichern
+# ---------------------------------------
 # -------------------------------------------------------
+
 
 def try_detect_with_native_args(sarc, model_path, rescale_factor):
     """Probiert detect_sarcomeres mit (model_path, rescale_factor); fällt stufenweise zurück."""
@@ -59,6 +74,7 @@ def try_detect_with_native_args(sarc, model_path, rescale_factor):
     sarc.detect_sarcomeres()
     return "native_default"
 
+
 def manual_rescale_2d_tiff(src_path: Path, r: float, out_dir: Path) -> Path:
     """Manuelles 2D-Rescaling als Fallback; gibt Pfad zu Temp-TIFF zurück."""
     if r == 1.0:
@@ -81,6 +97,7 @@ def manual_rescale_2d_tiff(src_path: Path, r: float, out_dir: Path) -> Path:
     imwrite(str(tmp_path), arr_rs)
     return tmp_path
 
+
 def write_row_append(csv_file: Path, header, row_dict):
     new_file = not csv_file.exists() or csv_file.stat().st_size == 0
     with open(csv_file, "a", newline="") as f:
@@ -89,9 +106,113 @@ def write_row_append(csv_file: Path, header, row_dict):
             writer.writeheader()
         writer.writerow(row_dict)
 
+
+# -------------------- OVERLAY HELPERS --------------------
+def _to_uint8_grayscale(arr: np.ndarray) -> np.ndarray:
+    """Linear nach uint8 [0..255] skaliert (nur für Visualization)."""
+    a = np.asarray(arr, dtype=np.float32)
+    amin, amax = float(np.nanmin(a)), float(np.nanmax(a))
+    if not np.isfinite(amin) or not np.isfinite(amax) or amax <= amin:
+        return np.zeros_like(a, dtype=np.uint8)
+    a = (a - amin) / (amax - amin)
+    return (np.clip(a, 0, 1) * 255.0).astype(np.uint8)
+
+
+def _ensure_2d(img: np.ndarray) -> np.ndarray:
+    """Nimmt 2D oder extrahiert erste Ebene aus (T,Y,X)/(Z,Y,X)."""
+    if img.ndim == 2:
+        return img
+    if img.ndim == 3:
+        return img[0]
+    raise RuntimeError(f"Overlay: erwartet 2D/3D, bekommen: {img.ndim}D.")
+
+
+def _resize_mask_to(mask: np.ndarray, target_hw):
+    """Nearest-Neighbor-Resize für Masken-Scores auf Ziel-(H,W)."""
+    if mask.shape == tuple(target_hw):
+        return mask
+    try:
+        from skimage.transform import resize
+    except Exception as e:
+        raise RuntimeError("Bitte 'scikit-image' installieren (für Masken-Resize).") from e
+    m = resize(mask.astype(float), target_hw, order=0, preserve_range=True, anti_aliasing=False)
+    return m
+
+
+def _binarize_simple(mask2d: np.ndarray, thr="auto", min_size=0) -> np.ndarray:
+    """Binarisiert Masken-Scores robust (Otsu oder fixer Schwellwert) und entfernt Kleinstobjekte."""
+    m = mask2d.astype(np.float32)
+    if thr == "auto":
+        try:
+            from skimage.filters import threshold_otsu
+            t = float(threshold_otsu(m))
+            if not np.isfinite(t) or t <= 0:
+                t = 0.5 * float(np.nanmax(m))
+        except Exception:
+            t = 0.5 * float(np.nanmax(m))
+    else:
+        t = float(thr)
+    mb = m > t
+    if min_size and min_size > 0:
+        try:
+            from skimage.morphology import remove_small_objects
+            mb = remove_small_objects(mb, min_size=min_size)
+        except Exception:
+            pass
+    return mb
+
+
+def build_final_zmask(original_path: Path, zmask_path: Path,
+                      sarcomere_mask_path,
+                      thr_z="auto", thr_sarco="auto", min_size_z=0) -> np.ndarray:
+    """Erzeuge finale Z-Maske: (Z) ∧ (finale sarcomere_mask, falls vorhanden)."""
+    from tifffile import imread
+    base = imread(str(original_path))
+    base2d = _ensure_2d(base)
+    # Z-Maske laden -> auf Bildgröße -> binarisieren
+    z = imread(str(zmask_path))
+    z2d = _ensure_2d(z)
+    z_rs = _resize_mask_to(z2d, base2d.shape)
+    z_bin = _binarize_simple(z_rs, thr=thr_z, min_size=min_size_z)
+    # Optional: mit finaler Sarcomere-Maske schneiden
+    if sarcomere_mask_path:
+        s = imread(str(sarcomere_mask_path))
+        s2d = _ensure_2d(s)
+        s_rs = _resize_mask_to(s2d, base2d.shape)
+        s_bin = _binarize_simple(s_rs, thr=thr_sarco, min_size=0)
+        z_bin = np.logical_and(z_bin, s_bin)
+    return z_bin
+
+
+def save_zband_overlay_with_mask(original_path: Path, final_mask_bool: np.ndarray, out_path: Path,
+                                 color=(0, 255, 0), alpha=0.55) -> None:
+    """Speichert RGB-Overlay ins Originalbild unter Verwendung einer Bool-Maske."""
+    from tifffile import imread, imwrite
+    base = imread(str(original_path))
+    base2d = _ensure_2d(base)
+    base8 = _to_uint8_grayscale(base2d)
+    rgb = np.stack([base8, base8, base8], axis=-1).astype(np.float32)
+    m = final_mask_bool
+    if np.any(m):
+        color_vec = np.array(color, dtype=np.float32)
+        rgb[m] = (1.0 - alpha) * rgb[m] + alpha * color_vec
+    rgb_uint8 = rgb.clip(0, 255).astype(np.uint8)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    from tifffile import imwrite
+    imwrite(str(out_path), rgb_uint8, photometric='rgb')
+
+
+def save_bool_mask(mask_bool: np.ndarray, out_path: Path) -> None:
+    """Speichert Bool-Maske als 8-bit TIFF (255 = True)."""
+    from tifffile import imwrite
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    imwrite(str(out_path), (mask_bool.astype(np.uint8) * 255))
+# --------------------------------------------------------
+
+
 def main():
     # -------- CLI --------
-    parser = argparse.ArgumentParser(description="Batch SarcAsM: Z-Bänder, Orientierung & Länge aus TIFFs")
+    parser = argparse.ArgumentParser(description="Batch SarcAsM: Z-Bänder, Orientierung & Länge aus TIFFs (mit gefiltertem Z-Overlay)")
     parser.add_argument("--model", dest="cli_model_path", default=None,
                         help="Pfad zu Gewichten (überschreibt model_path im Skript).")
     parser.add_argument("--rescale", dest="cli_rescale", type=float, default=None,
@@ -131,6 +252,8 @@ def main():
     print(f"  recurse           = {recurse}")
     print(f"  model_path        = {_model_path}")
     print(f"  rescale_factor    = {_rescale_factor}")
+    print(f"  make_overlay      = {make_overlay} (color={overlay_color_rgb}, alpha={overlay_alpha})")
+    print(f"  filtered_z        = {use_filtered_zmask} (thr_z={overlay_mask_threshold}, thr_sarco={sarco_mask_threshold}, min_size={overlay_min_size_px})")
     print(f"[INFO] Found {len(files)} image(s). Writing rows to: {csv_path}")
 
     for i, inp in enumerate(files, 1):
@@ -184,14 +307,45 @@ def main():
                 if src and os.path.exists(src):
                     shutil.copyfile(src, str(out / f"{inp.stem}_{out_name}"))
 
+            # --- Overlay (Z-Bänder NACH Filtern) ---
+            if make_overlay:
+                zmask_src = getattr(sarc, "file_zbands", None)
+                sarco_mask_src = getattr(sarc, "file_sarcomere_mask", None) if use_filtered_zmask else None
+                if zmask_src and os.path.exists(zmask_src):
+                    try:
+                        final_mask = build_final_zmask(
+                            original_path=inp,
+                            zmask_path=Path(zmask_src),
+                            sarcomere_mask_path=(Path(sarco_mask_src) if (sarco_mask_src and os.path.exists(sarco_mask_src)) else None),
+                            thr_z=overlay_mask_threshold,
+                            thr_sarco=sarco_mask_threshold,
+                            min_size_z=overlay_min_size_px,
+                        )
+                        # Overlay speichern
+                        overlay_path = out / f"{inp.stem}{overlay_suffix}.tif"
+                        save_zband_overlay_with_mask(
+                            original_path=inp,
+                            final_mask_bool=final_mask,
+                            out_path=overlay_path,
+                            color=overlay_color_rgb,
+                            alpha=overlay_alpha,
+                        )
+                        print(f"    [overlay] saved -> {overlay_path.name}")
+                        # Gefilterte Z-Maske optional separat exportieren
+                        if save_filtered_zmask:
+                            zmask_f_path = out / f"{inp.stem}_z_bands_mask_filtered.tif"
+                            save_bool_mask(final_mask, zmask_f_path)
+                    except Exception as e:
+                        warnings.warn(f"Filtered Z-overlay failed for {inp.name}: {e}")
+
             # --- Row for batch CSV ---
             d = getattr(sarc, "data", {}) or {}
             row = {"filename": inp.name, "filepath": str(inp), "detect_mode": used_mode}
 
-            # n_sarcomeres robust bestimmen (an deine Keys angepasst)
+            # n_sarcomeres robust bestimmen (nach Filtern)
             n = d.get("n_sarcomeres")
             if n is None:
-                for cand in ("num_sarcomeres", "n_vectors", "n_mbands"):
+                for cand in ("num_sarcomeres", "n_vectors"):
                     if cand in d:
                         n = d[cand]; break
             if n is None and "sarcomere_length_vectors" in d:
@@ -231,6 +385,7 @@ def main():
                     Path(tmp_created).unlink()
 
     print("[OK] Batch done.")
+
 
 if __name__ == "__main__":
     main()
