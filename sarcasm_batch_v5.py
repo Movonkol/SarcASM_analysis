@@ -50,7 +50,7 @@ warnings.simplefilter("always")
 np.seterr(all="ignore")
 
 # ---------------- USER SETTINGS ----------------
-input_dir = r"C:\\Users\\Moritz\\OneDrive\\Dokumente\\HFFvsHCF"
+input_dir = r"C:\Users\Moritz\OneDrive\Dokumente\MM.4\original\1"
 
 # Fallback-µm/px, falls im TIFF nichts steht
 pixelsize_fallback_um_per_px = 0.14017
@@ -733,3 +733,4 @@ if __name__ == "__main__":
     import multiprocessing as mp
     mp.freeze_support()
     main()
+
