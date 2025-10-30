@@ -21,8 +21,12 @@ It processes all images in a given folder, generates orientation/Z-band/M-band/m
 
 1) **Install**
 ```bash
-pip install sarc-asm
 pip install numpy
+sarc-asm
+ tifffile
+scikit-image
+ matplotlib
+
 ```
 
 2) **Save the script** (e.g. as `sarcasm_batch_v5.py`) and edit the **USER SETTINGS** block at the top:
