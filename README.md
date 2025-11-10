@@ -1,6 +1,6 @@
 # SarcAsM batch v8.2 – Installation & Usage Guide (VS Code friendly)
 
-This script runs the **SArcasM batch analysis** on multiple TIFF images and writes the main metrics to a CSV file.  
+This script runs the **SarcAsM batch analysis** on multiple TIFF images and writes the main metrics to a CSV file.  
 It is designed so that biologists can use it with **Python + VS Code** without needing deep programming knowledge.
 
 ---
@@ -50,22 +50,19 @@ You do **not** need to type `python SArcasm.py` manually to run it (only for ins
    - Install a Java JDK (e.g. Temurin JDK 8, 11, or 17).
    - You can still use the script without this and just define a fixed pixel size.
 
+### 2.3 Image formats
+
+- The script expects **TIFF** input:
+  - Standard `.tif` / `.tiff`
+  - Or **OME-TIFF** (the script can automatically recognize OME-TIFF metadata).
+- If your microscope produces proprietary formats (e.g. `.czi`, `.lif`, `.nd2`, …), you **must first convert** them to TIFF / OME-TIFF, for example using:
+  - **Fiji/ImageJ** + *Bio-Formats Importer* → then **File → Save As… → TIFF** or **Bio-Formats Exporter (OME-TIFF)** or use the script `OME_tiff_batch`.
+
 ---
 
 ## 3. Getting the code into VS Code
 
-You have two options:
-
-### Option A – Clone the repo
-
-```bash
-git clone <YOUR_REPO_URL>
-cd <YOUR_REPO_FOLDER>
-```
-
-Open this folder in VS Code.
-
-### Option B – Copy & paste from GitHub (recommended for non-coders)
+###  Copy & paste from GitHub (recommended for non-coders)
 
 1. Create a folder on your computer, for example:
 
@@ -153,7 +150,7 @@ If you want **Fiji/PyImageJ** support (automatic pixel size from LIF/TIFF via Bi
 pip install pyimagej scyjava
 ```
 
-If these `pip` commands run without errors, you’re ready to configure and run the script.
+If these `pip` commands run without errors, you’re ready to configure and run the script (also try pip3 if pip doesnt work).
 
 ---
 
@@ -164,9 +161,11 @@ Use a simple structure like this:
 ```text
 SArcasm/
   SArcasm.py
-  input/   → your .tif / .tiff images
+  input/   → your .tif / .tiff / OME-TIFF images
   output/  → will receive CSV and overlays
 ```
+
+> **Important:** Make sure your microscope data has been **converted to TIFF or OME-TIFF** *before* placing it in the `input` folder. Proprietary formats (e.g. `.czi`, `.lif`, `.nd2`) will not be processed directly.
 
 Create the `input` and `output` folders manually in your OS or directly in VS Code.
 
@@ -193,7 +192,7 @@ fiji_maven_coord = 'sc.fiji:fiji:2.9.0'
 
 The most important things to edit:
 
-1. **Input folder with your TIFF images**
+1. **Input folder with your TIFF / OME-TIFF images**
 
    ```python
    input_dir = r"C:\Users\YourName\Documents\SArcasm\input"
@@ -213,7 +212,7 @@ The most important things to edit:
 
 3. **Pixel size (µm/px)**
 
-   - If you want the script to **read pixel size from image metadata / BioFormats**:
+   - If you want the script to **read pixel size from image metadata / BioFormats** (works best with OME-TIFF):
 
      ```python
      auto_pixelsize = True
@@ -260,7 +259,7 @@ For basic use, you can keep the default values and only change:
    - If needed, select the interpreter (bottom-right blue bar → click Python version → choose the `.venv` or system Python).
 
 You will see the script’s log output in the integrated terminal or in the “Python”/“Output” panel in VS Code.  
-The script processes all `.tif` / `.tiff` files in `input_dir` and writes results to `out_dir`.
+The script processes all `.tif` / `.tiff` / OME-TIFF files in `input_dir` and writes results to `out_dir`.
 
 Typical outputs:
 
