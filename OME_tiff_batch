@@ -1,0 +1,76 @@
+# Jython (Fiji) – LIF -> OME-TIFF (ein Kanal, ohne UI)
+from ij import IJ
+from ij.io import OpenDialog, DirectoryChooser
+from ij.plugin import ChannelSplitter
+from loci.plugins import BF
+from loci.plugins.in import ImporterOptions
+from loci.formats import ImageReader
+
+def safe_name(s):
+    for ch in '\\/:*?"<>|':
+        s = s.replace(ch, '_')
+    return s
+
+# --- Eingaben ---
+od = OpenDialog("Wähle die .lif-Datei", None)
+lifPath = od.getPath()
+if lifPath is None:
+    IJ.error("Abgebrochen."); raise SystemExit
+
+dc = DirectoryChooser("Wähle Ausgabe-Ordner")
+outDir = dc.getDirectory()
+if outDir is None:
+    IJ.error("Abgebrochen."); raise SystemExit
+
+chan = int(IJ.getNumber("Welcher Kanal (1 = erster Kanal)?", 1))
+if chan < 1:
+    IJ.error("Ungültiger Kanal."); raise SystemExit
+
+# Serienzahl ermitteln
+reader = ImageReader()
+reader.setId(lifPath)
+seriesCount = reader.getSeriesCount()
+
+try:
+    for s in range(seriesCount):
+        # Serie laden (virtuell, speicherschonend)
+        opts = ImporterOptions()
+        opts.setId(lifPath)
+        opts.setOpenAllSeries(False)
+        opts.setSeriesOn(s, True)
+        opts.setVirtual(True)
+        opts.setStackOrder(ImporterOptions.ORDER_XYCZT)
+
+        imps = BF.openImagePlus(opts)
+        if not imps:
+            IJ.log("Übersprungen: Serie %d konnte nicht geöffnet werden." % s)
+            continue
+        imp = imps[0]  # nicht anzeigen
+
+        c = imp.getNChannels()
+        if chan > c:
+            imp.close()
+            IJ.log("Übersprungen: Serie %d hat nur %d Kanal/Kanäle." % (s, c))
+            continue
+
+        # gewünschten Kanal als eigenes ImagePlus holen
+        split = ChannelSplitter.split(imp)  # Liste von ImagePlus (C1..Ck)
+        sub = split[chan-1]                 # 1-basiert -> 0-basiert
+        # Rest schließen
+        for i, im in enumerate(split):
+            if i != (chan-1):
+                im.close()
+        title = safe_name(imp.getTitle())
+        imp.close()
+
+        outName = "%03d_%s_C%d.ome.tif" % (s+1, title, chan)
+        outPath = outDir + outName
+
+        # Speichern als OME-TIFF (mit OME-XML)
+        IJ.run(sub, "Bio-Formats Exporter", "save=[%s] compression=Uncompressed" % outPath)
+        sub.close()
+        IJ.log("Gespeichert: " + outPath)
+finally:
+    reader.close()
+
+IJ.log("Fertig.")
