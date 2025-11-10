@@ -1,125 +1,297 @@
-# SarcAsM Batch (Folder) — v5
+# SarcAsM batch v8.2 – Installation & Usage Guide (VS Code friendly)
 
-**Batch-processing pipeline for sarcomere analysis**  
-This script uses the [`sarc-asm`](https://pypi.org/project/sarc-asm/) toolkit to automatically detect and analyze sarcomeres in single-channel TIFF microscopy images.  
-It processes all images in a given folder, generates orientation/Z-band/M-band/mask maps, and compiles key quantitative metrics into a single CSV file.
-
----
-
-## Input image requirements
-
-- **TIFF format** (`.tif` / `.tiff`) — 8-bit or 16-bit grayscale.
-- **Single channel only**: The script expects an image containing **only the sarcomere signal** (no RGB, no extra channels).  
-  If your microscopy export contains multiple channels, split them first in ImageJ/Fiji or your acquisition software and save only the relevant sarcomere channel as a separate `.tif`.
-- Avoid compression; use uncompressed TIFFs for compatibility.
-- Find the Pixel Size of your Image in ImageJ/Fiji
-  Image → Properties (Shift+P) → Width, Height, Pixel size, Unit
+This script runs the **SArcasM batch analysis** on multiple TIFF images and writes the main metrics to a CSV file.  
+It is designed so that biologists can use it with **Python + VS Code** without needing deep programming knowledge.
 
 ---
 
-## Quick start
+## 1. What you do in practice
 
-1) **Install**
+1. Install **Python** and **VS Code**.  
+2. Create a folder for the project (e.g. `SArcasm/`).  
+3. In VS Code, create a file `SArcasm.py` and **paste the script code** from GitHub.  
+4. In VS Code, open the built-in **Terminal** and run a few `pip install` commands.  
+5. Adjust the **USER SETTINGS** at the top of `SArcasm.py` (input folder, output folder, pixel size).  
+6. Click the **green “Run” button** in VS Code to start the analysis.
+
+You do **not** need to type `python SArcasm.py` manually to run it (only for installing packages).
+
+---
+
+## 2. Requirements
+
+### 2.1 Operating system
+
+- Windows 10 / 11  
+- macOS or Linux will also work, but examples below use Windows paths.
+
+### 2.2 Software
+
+1. **Python 3.9+**
+   - Download from the official Python website.
+   - During installation on Windows, make sure to tick:
+
+     **“Add Python to PATH”**
+   - Check in a terminal (Command Prompt or PowerShell):
+
+     ```bash
+     python --version
+     ```
+
+2. **Visual Studio Code (VS Code)**
+   - Download from the official VS Code website.
+   - Start VS Code.
+   - Install the **Python extension**:
+     - Click the **Extensions** icon (four small squares) on the left.
+     - Search for **“Python”** (by Microsoft) and install it.
+
+3. (Optional) **Java + Fiji/PyImageJ**
+   - Only needed if you want **automatic µm/px detection** using PyImageJ and BioFormats.
+   - Install a Java JDK (e.g. Temurin JDK 8, 11, or 17).
+   - You can still use the script without this and just define a fixed pixel size.
+
+---
+
+## 3. Getting the code into VS Code
+
+You have two options:
+
+### Option A – Clone the repo
+
 ```bash
-pip install numpy
-sarc-asm
-tifffile
-scikit-image
-matplotlib
-pyimagej scyjava
+git clone <YOUR_REPO_URL>
+cd <YOUR_REPO_FOLDER>
 ```
 
-2) **Save the script** (e.g. as `sarcasm_batch_v5.py`) and edit the **USER SETTINGS** block at the top:
+Open this folder in VS Code.
+
+### Option B – Copy & paste from GitHub (recommended for non-coders)
+
+1. Create a folder on your computer, for example:
+
+   `C:\Users\YourName\Documents\SArcasm`
+
+2. Start **VS Code**.
+3. Go to **File → Open Folder…** and select the `SArcasm` folder.
+4. In the VS Code file explorer (left side), click **New File** and name it:
+
+   `SArcasm.py`
+
+5. On GitHub, open the script file, select the entire Python code and **copy** it.
+6. Paste it into `SArcasm.py` in VS Code.
+7. Save the file (`Ctrl + S`).
+
+---
+
+## 4. Setting up the Python environment (VS Code Terminal)
+
+You only need the terminal for **installing packages**, not for running the script.
+
+### 4.1 Open the VS Code terminal
+
+1. In VS Code, go to:
+
+   **Terminal → New Terminal**
+
+2. A terminal opens at the bottom.  
+   - On Windows this is usually **PowerShell** or **Command Prompt**.  
+   - Sometimes you might see **bash** (e.g. Git Bash). That is also fine.
+
+Check that the terminal is in the project folder. You should see a line like:
+
+```text
+C:\Users\YourName\Documents\SArcasm>
+```
+
+If not, change directory:
+
+```bash
+cd "C:\Users\YourName\Documents\SArcasm"
+```
+
+### 4.2 (Optional) Create a virtual environment
+
+This keeps your dependencies clean:
+
+```bash
+python -m venv .venv
+```
+
+Activate it:
+
+- PowerShell:
+
+  ```bash
+  .venv\Scripts\Activate.ps1
+  ```
+
+- Command Prompt (cmd):
+
+  ```bash
+  .venv\Scripts\activate.bat
+  ```
+
+On macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+You should now see `(.venv)` at the beginning of the terminal line.
+
+### 4.3 Install required Python packages
+
+Run in the **VS Code terminal**:
+
+```bash
+pip install sarc-asm tifffile scikit-image
+```
+
+If you want **Fiji/PyImageJ** support (automatic pixel size from LIF/TIFF via BioFormats):
+
+```bash
+pip install pyimagej scyjava
+```
+
+If these `pip` commands run without errors, you’re ready to configure and run the script.
+
+---
+
+## 5. Folder structure for your data
+
+Use a simple structure like this:
+
+```text
+SArcasm/
+  SArcasm.py
+  input/   → your .tif / .tiff images
+  output/  → will receive CSV and overlays
+```
+
+Create the `input` and `output` folders manually in your OS or directly in VS Code.
+
+---
+
+## 6. Adjust the USER SETTINGS in `SArcasm.py`
+
+At the top of the script there is a block called **USER SETTINGS**, for example:
+
 ```python
-input_dir = r"C:\Users\Moritz\Downloads\MM.4"  # folder with TIFFs
-pixelsize_um_per_px = 0.0901876                # µm per pixel
-out_dir = r"./sarcasm_results"                 # output folder
-recurse = False                                # True -> include subfolders
-# Analysis params
-threshold_mbands = 0.5
-median_filter_radius = 0.25   # µm
-linewidth = 0.2               # µm
-interp_factor = 4
-slen_lims = (1.5, 2.4)        # µm (min, max)
+# ---------------- USER SETTINGS ----------------
+input_dir = r"C:\Users\YourName\Documents\SArcasm\input"
+
+pixelsize_fallback_um_per_px = 0.14017
+auto_pixelsize = True
+
+pixelsize_by_prefix: Dict[str, float] = {
+    # "ExamplePrefix_": 0.07,
+}
+
+enable_fiji_via_pyimagej = True
+fiji_maven_coord = 'sc.fiji:fiji:2.9.0'
 ```
 
-3) **Run**
+The most important things to edit:
+
+1. **Input folder with your TIFF images**
+
+   ```python
+   input_dir = r"C:\Users\YourName\Documents\SArcasm\input"
+   ```
+
+   Use an absolute path and keep the leading `r` (raw string) in front of the quotes on Windows.
+
+2. **Output folder (for CSV + overlays)**
+
+   Somewhere further down, you will find:
+
+   ```python
+   out_dir = r"C:\Users\YourName\Documents\SArcasm\output"
+   ```
+
+   Adjust it to your preferred output folder. The folder should exist.
+
+3. **Pixel size (µm/px)**
+
+   - If you want the script to **read pixel size from image metadata / BioFormats**:
+
+     ```python
+     auto_pixelsize = True
+     enable_fiji_via_pyimagej = True
+     ```
+
+   - If you want to use a **fixed pixel size** and **no Fiji**:
+
+     ```python
+     auto_pixelsize = False
+     pixelsize_fallback_um_per_px = 0.14  # set your value here
+     enable_fiji_via_pyimagej = False
+     ```
+
+4. **Optional: custom pixel size by filename prefix**
+
+   Example:
+
+   ```python
+   pixelsize_by_prefix = {
+       "EHTM_": 0.0707,
+       "Sample2_": 0.1415,
+   }
+   ```
+
+   If a filename starts with one of these prefixes, that pixel size will be used.
+
+For basic use, you can keep the default values and only change:
+
+- `input_dir`
+- `out_dir`
+- `auto_pixelsize` / `pixelsize_fallback_um_per_px`
+- `enable_fiji_via_pyimagej`
+
+---
+
+## 7. Running the script in VS Code (without typing `python SArcasm.py`)
+
+1. Make sure `SArcasm.py` is open in the editor.
+2. At the **top right** of the editor, click the **green triangle button** (Run Python file).  
+   – or –  
+   Go to **Run → Run Without Debugging** (`Ctrl + F5`).
+3. VS Code will run the script using the selected Python interpreter.
+   - If needed, select the interpreter (bottom-right blue bar → click Python version → choose the `.venv` or system Python).
+
+You will see the script’s log output in the integrated terminal or in the “Python”/“Output” panel in VS Code.  
+The script processes all `.tif` / `.tiff` files in `input_dir` and writes results to `out_dir`.
+
+Typical outputs:
+
+- A `.csv` file with the measured metrics.
+- Optional overlay images and masks, depending on the overlay settings.
+
+---
+
+## 8. Troubleshooting
+
+**Error: `ModuleNotFoundError: No module named 'sarc_asm'`**  
+→ The `sarc-asm` package is missing.
+
 ```bash
-python sarcasm_batch_v5.py
+pip install sarc-asm
 ```
 
----
+**Error: `python is not recognized as an internal or external command` (Windows)**  
+→ Python is not in PATH or not installed correctly. Reinstall Python and tick **“Add Python to PATH”**.
 
-## What the script does
+**PyImageJ/Fiji errors, but you don’t care about automatic pixel size**  
+→ Disable Fiji & auto pixel size in `SArcasm.py`:
 
-For each `.tif/.tiff` in `input_dir` (non-recursive unless `recurse=True`):
-
-1. Initialize a `sarc-asm` `Structure` with your **pixel size** (`µm/px`).
-2. `detect_sarcomeres()`  
-3. `analyze_z_bands(median_filter_radius=...)`  
-4. `analyze_sarcomere_vectors(...)` using your thresholds/limits.
-5. **Copy outputs** for that image into `out_dir`:
-   - `{stem}_orientation_map.tif`
-   - `{stem}_z_bands_mask.tif`
-   - `{stem}_m_bands_mask.tif`
-   - `{stem}_sarcomere_mask.tif`
-6. **Append one row** to `sarcasm_batch_basic.csv` with:
-   - `filename`, `filepath`
-   - `sarcomere_length_mean`, `sarcomere_length_std`
-   - `sarcomere_orientation_mean`, `sarcomere_orientation_std`
-   - `sarcomere_oop`
-   - `n_sarcomeres`
-
-If a metric is an array, the script stores its **NaN-mean**; scalars are cast to `float`.
-
----
-
-## Parameters (at the top of the script)
-
-| Name | Type | Unit | Purpose / Notes |
-|---|---|---|---|
-| `input_dir` | path | — | Folder containing `.tif/.tiff` images. |
-| `pixelsize_um_per_px` | float | µm/px | **Critical.** Your microscope’s pixel size. |
-| `out_dir` | path | — | Where maps and CSV are written. Auto-created. |
-| `recurse` | bool | — | `True` to include subfolders (`rglob`). |
-| `threshold_mbands` | float | — | Threshold for M-band detection in vector analysis. |
-| `median_filter_radius` | float | µm | Median filter radius used in Z-band & vector steps. |
-| `linewidth` | float | µm | Line width used for vector analysis. |
-| `interp_factor` | int | — | Interpolation factor for vector analysis. |
-| `slen_lims` | (min,max) | µm | Accepted sarcomere length range. |
-
----
-
-## Output
-
-```
-out_dir/
-├─ sarcasm_batch_basic.csv
-├─ image1_orientation_map.tif
-├─ image1_z_bands_mask.tif
-├─ image1_m_bands_mask.tif
-├─ image1_sarcomere_mask.tif
-└─ ... (repeated per image)
+```python
+auto_pixelsize = False
+enable_fiji_via_pyimagej = False
+pixelsize_fallback_um_per_px = 0.14  # or your value
 ```
 
-- **CSV** contains one row per processed image with consistent headers.
-- **Maps** are copied from the `sarc-asm` temp outputs and renamed with the input stem.
+After that, the script will just use the fixed fallback pixel size.
 
 ---
 
-## Tips & troubleshooting
-
-- **No TIFF files found**: Check `input_dir`, file extensions, and `recurse`.
-- **Incorrect metrics**: Verify `pixelsize_um_per_px`; wrong pixel size skews lengths.
-- **Too few/too many sarcomeres**: Adjust `threshold_mbands`, `median_filter_radius`, `linewidth`, and `slen_lims`.
-- **Performance**: Set `recurse=False` to limit file count; reduce `interp_factor` if needed.
-
----
-
-## Requirements
-
-- Python 3.8+
-- Packages: `sarc-asm`, `numpy` (installed via `pip install sarc-asm numpy`)
-- OS: Windows/macOS/Linux (paths shown are examples)
-
-
+You can drop this file directly into your repository as `README.md` and adapt paths or parameter descriptions as needed.
