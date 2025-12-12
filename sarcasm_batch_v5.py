@@ -1,27 +1,4 @@
 # /env python3
-"""
-SarcAsM batch — v8.2 STABLE + OPTIMIERT (Single-Thread, Auto-µm/px inkl. Fiji/PyImageJ, Metrics only)
-
-Änderungen ggü. v8.1:
-- **Preprocessing komplett entfernt** (kein adaptives Contrast-Stretching, keine tmp-Preproc-Dateien).
-- **Deutlich stabiler**: zentrales Logging (Konsole + Datei `sarcasm_batch.log`),
-  faulthandler aktiviert, keine `SystemExit`-Abbrüche mehr, robustere Fehlerpfade.
-- Fiji wird **sanft deaktiviert**, falls Initialisierung oder Lesen scheitert (weiter mit Fallback).
-- Aufräumen temporärer Dateien per `tempfile`-Kontext (nur falls Rescale genutzt wird).
-
-PERFORMANCE-OPTIMIERUNGEN (2025-12-12):
-- ✅ Pre-compiled Regex Patterns (5-15% schneller)
-- ✅ Optimierte _unit_to_um mit Dictionary-Lookup (2-5% schneller)
-- ✅ In-place Array-Operationen in _to_uint8_grayscale (10-20% schneller, 30-50% weniger Memory)
-- ✅ Effiziente Dateisammlung mit Duplikat-Check während Iteration (1-3% schneller)
-→ Gesamt-Speedup: ~15-25% bei typischen Batches
-→ Weitere Optimierungen verfügbar: Siehe OPTIMIZATION_README.md
-
-Requires:
-    pip install sarc-asm tifffile scikit-image
-    # optional für Fiji/PyImageJ:
-    pip install pyimagej scyjava
-"""
 
 # --- headless & ruhige Ausgaben ---
 import os
