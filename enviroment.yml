@@ -1,0 +1,35 @@
+name: sarcasm
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version (3.9+ required)
+  - python>=3.9
+
+  # Core scientific libraries
+  - numpy
+  - scipy
+
+  # Image processing
+  - scikit-image
+  - tifffile
+  - pillow
+
+  # Visualization
+  - matplotlib
+
+  # XML parsing (for OME-TIFF)
+  - lxml
+
+  # Java runtime (required for PyImageJ/Fiji support)
+  - openjdk=11
+
+  # Pip dependencies
+  - pip
+  - pip:
+      # SarcASM library (main requirement)
+      - sarc-asm
+
+      # Optional: Fiji/PyImageJ for Bio-Formats metadata extraction
+      - pyimagej
+      - scyjava
