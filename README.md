@@ -1,4 +1,4 @@
-# SarcAsM batch v8.2 – Installation & Usage Guide (VS Code friendly)
+# SarcAsM batch– Installation & Usage Guide (VS Code friendly)
 
 This script runs the **SarcAsM batch analysis** on multiple TIFF images and writes the main metrics to a CSV file.  
 It is designed so that biologists can use it with **Python + VS Code** without needing deep programming knowledge.
